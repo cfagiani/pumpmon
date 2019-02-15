@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Pumpmon Viewer</title>
+    <script src="https://cdn.plot.ly/plotly-1.44.4.min.js"></script>
+
+</head>
+
+<body>
+<div id="levelplot">
+    <script>
+        Plotly.d3.json("waterlevels?from=0&to=2550173038000", function (err, rows) {
+
+            function unpack(rows, key) {
+                if (key == "timestamp") {
+                    return rows.map(function (row) {
+                        var d = new Date(0);
+                        d.setUTCSeconds(row[key] / 1000);
+                        return d;
+                    });
+
+                } else {
+                    return rows.map(function (row) {
+                        return row[key]*0.393701;
+                    });
+                }
+            }
+
+            var trace1 = {
+                type: "scatter",
+                mode: "lines",
+                name: 'Water Level',
+                x: unpack(rows, 'timestamp'),
+                y: unpack(rows, 'value'),
+                line: {color: '#17BECF'}
+            }
+
+
+            var data = [trace1];
+
+            var layout = {
+                title: 'Sump Pump Water Levels',
+                xaxis: {
+                    autorange: true,
+                    range: ['2019-02-13', '2019-02-27'],
+                    rangeselector: {
+                        buttons: [
+                            {
+                                count: 1,
+                                label: '1h',
+                                step: 'hour',
+                                stepmode: 'backward'
+                            },
+                            {
+                                count: 6,
+                                label: '6h',
+                                step: 'hour',
+                                stepmode: 'backward'
+                            },
+                            {step: 'all'}
+                        ]
+                    },
+                    rangeslider: {range: ['2019-02-13', '2019-02-27']},
+                    type: 'date'
+                },
+                yaxis: {
+                    autorange: true,
+                    range: [0, 100],
+                    type: 'linear'
+                }
+            };
+
+            Plotly.newPlot('levelplot', data, layout);
+        })
+    </script>
+
+</div>
+
+</body>
+</html>
