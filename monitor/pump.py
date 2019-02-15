@@ -73,7 +73,9 @@ class PumpMonitor:
     def start(self):
         self.is_running = True
         while self.is_running:
-            self.dao.save(WaterLevel(time.time() * 1000, self.convert_to_depth(self.avg_sample())))
+            depth = self.convert_to_depth(self.avg_sample())
+            if depth >= 0:
+                self.dao.save(WaterLevel(time.time() * 1000, depth))
             time.sleep(self.measurement_frequency)
 
     def stop(self):
