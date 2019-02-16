@@ -34,11 +34,11 @@ def main(args):
 
     except KeyboardInterrupt as ki:
         print("shutting down")
-
     finally:
         if monitor is not None:
             monitor.stop()
-
+        if db_mgr is not None:
+            db_mgr.close_all()
 
 
 def configure_logger(is_debug):

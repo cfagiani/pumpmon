@@ -10,22 +10,27 @@
 <body>
 <div id="levelplot">
     <script>
-        Plotly.d3.json("waterlevels?from=0&to=2550173038000", function (err, rows) {
 
-            function unpack(rows, key) {
-                if (key == "timestamp") {
-                    return rows.map(function (row) {
-                        var d = new Date(0);
-                        d.setUTCSeconds(row[key] / 1000);
-                        return d;
-                    });
+        function unpack(rows, key) {
+            if (key == "timestamp") {
+                return rows.map(function (row) {
+                    var d = new Date(0);
+                    d.setUTCSeconds(row[key] / 1000);
+                    return d;
+                });
 
-                } else {
-                    return rows.map(function (row) {
-                        return row[key]*0.393701;
-                    });
-                }
+            } else {
+                return rows.map(function (row) {
+                    return row[key] * 0.393701;
+                });
             }
+        }
+
+        var start = Date.now() - (3*24*60*60*1000); // 3 days ago
+        var end = Date.now();
+        var lastTimestamp = end;
+        Plotly.d3.json("waterlevels?from=" + start + "&to=" + end, function (err, rows) {
+
 
             var trace1 = {
                 type: "scatter",
@@ -34,8 +39,9 @@
                 x: unpack(rows, 'timestamp'),
                 y: unpack(rows, 'value'),
                 line: {color: '#17BECF'}
-            }
+            };
 
+            lastTimestamp = rows[rows.length - 1]['timestamp'];
 
             var data = [trace1];
 
@@ -43,7 +49,6 @@
                 title: 'Sump Pump Water Levels',
                 xaxis: {
                     autorange: true,
-                    range: ['2019-02-13', '2019-02-27'],
                     rangeselector: {
                         buttons: [
                             {
@@ -61,18 +66,34 @@
                             {step: 'all'}
                         ]
                     },
-                    rangeslider: {range: ['2019-02-13', '2019-02-27']},
+                    rangeslider: {},
                     type: 'date'
                 },
                 yaxis: {
                     autorange: true,
-                    range: [0, 100],
                     type: 'linear'
                 }
             };
 
             Plotly.newPlot('levelplot', data, layout);
-        })
+
+            var checkInterval = 30000;
+            //update the data every checkInterval milliseconds
+            setInterval(function () {
+
+                Plotly.d3.json("waterlevels?from=" + lastTimestamp + "&to=" + (Date.now()), function (err, rows) {
+                    var update = {
+                        x: [unpack(rows, 'timestamp')],
+                        y: [unpack(rows, 'value')]
+                    };
+
+                    if (rows.length > 0) {
+                        lastTimestamp = rows[rows.length - 1]['timestamp'];
+                        Plotly.extendTraces('levelplot', update, [0]);
+                    }
+                });
+            }, checkInterval);
+        });
     </script>
 
 </div>

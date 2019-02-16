@@ -24,7 +24,7 @@ class WaterLevelDao:
                 "INSERT into {table} (timestamp, value) VALUES (?,?)".format(table=table_name),
                 (level.timestamp, level.value))
             return None
-
+        level.validate()
         self.db_mgr.execute_transaction(insert)
 
     def get_by_date_range(self, start=0, end=time.time() * 1000):
