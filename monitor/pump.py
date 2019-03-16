@@ -1,83 +1,81 @@
+"""
+__author__ = 'Christopher Fagiani'
+"""
 import time
-
-import RPi.GPIO as GPIO
-
-from model.waterlevel import WaterLevel
 
 CONFIG_SECTION = "monitor"
 
-SPEED_OF_SOUND = 34300  # cm/sec
-
 
 class PumpMonitor:
+    """
+    This class is used in conjunction with a Sensor to measure the water level in a sump pump pit. Since the raw
+    sensor values can be noisy, this class will use a multiple measurement samples and return the average
+    value of all the measurements each time the get_measurement method is called. The value returned by the
+    get_measurement method is the depth of the water in centimeters.
 
-    def __init__(self, config, dao):
-        self.__init_GPIO(config.getint(CONFIG_SECTION, "trigger_pin"), config.getint(CONFIG_SECTION, "echo_pin"))
+    The number of samples, as well as the delay between readings can be configured via num_samples and sample_delay
+    configuration parameters (in the 'monitor' section of a config object). Additionally, the drop_extremes flag can be
+    passed in the config to instruct this class to drop the min and max measurements when calculating the average (this
+    is helpful if to negate the impact of an aberrant reading skewing the average). The distance_to_bottom configuration
+    parameter is the distance from the sensor to the bottom of the pump pit in centimeters.
+    """
+
+    def __init__(self, config, sensor=None):
+        """
+        Initializes the class by reading the config values and constructing a sensor (if not passed in). In the normal
+        case, the sensor value should be None, thus allowing this class to use the trigger_pin and echo_pin config
+        values to initialize its own Sensor instance. The only time one should need to pass in a Sensor instance is for
+        testing with a mocked sensor object.
+        :param config:
+        :param sensor:
+        """
+        if sensor is None:
+            from sensor import SensorDriver
+            self.sensor = SensorDriver(config.getint(CONFIG_SECTION, "trigger_pin"),
+                                       config.getint(CONFIG_SECTION, "echo_pin"))
+        else:
+            self.sensor = sensor
         self.num_samples = config.getint(CONFIG_SECTION, "num_samples")
         self.drop_extremes = config.getboolean(CONFIG_SECTION, "drop_extremes")
         self.sample_delay = config.getfloat(CONFIG_SECTION, "sample_delay")
-        self.measurement_frequency = config.getfloat(CONFIG_SECTION, "measurement_frequency")
         self.is_running = False
         self.dist_to_bottom = config.getfloat(CONFIG_SECTION, "distance_to_bottom")
-        self.dao = dao
 
-    def __init_GPIO(self, trigger_pin, echo_pin):
-        GPIO.setmode(GPIO.BCM)
-        # set GPIO Pins
-        self.GPIO_TRIGGER = trigger_pin
-        self.GPIO_ECHO = echo_pin
+    def _avg_sample(self):
+        """
+        Takes num_samples measurements from the sensor and returns the average. If drop_extremes is true, the min and
+        max values will be omitted before calculating the average.
 
-        # set GPIO direction (IN / OUT)
-        GPIO.setup(self.GPIO_TRIGGER, GPIO.OUT)
-        GPIO.setup(self.GPIO_ECHO, GPIO.IN)
-
-    def measure_distance(self):
-        # set Trigger to HIGH
-        GPIO.output(self.GPIO_TRIGGER, True)
-
-        # set Trigger after 0.01ms to LOW
-        time.sleep(0.00001)
-        GPIO.output(self.GPIO_TRIGGER, False)
-
-        start_time = time.time()
-        stop_time = time.time()
-
-        # save StartTime
-        while GPIO.input(self.GPIO_ECHO) == 0:
-            start_time = time.time()
-
-        # save time of arrival
-        while GPIO.input(self.GPIO_ECHO) == 1:
-            stop_time = time.time()
-
-        # time difference between start and arrival
-        elapsed = stop_time - start_time
-        # divide by 2 to get one-way time
-        distance = (elapsed * SPEED_OF_SOUND) / 2
-
-        return distance
-
-    def avg_sample(self):
+        Since this method takes num_samples with a delay of sample_delay seconds between samples, it could take a non-
+        trivial amount of time to return if either of those values are high.
+        :return: average distance from sensor to top of water in centimeters
+        """
         samples = [0] * self.num_samples
         for i in range(self.num_samples):
-            samples[i] = self.measure_distance()
+            samples[i] = self.sensor.measure_distance()
             time.sleep(self.sample_delay)
         if self.drop_extremes:
             samples.sort()
             samples = samples[1:-1]
             return sum(samples) / len(samples)
 
-    def convert_to_depth(self, dist):
+    def _convert_to_depth(self, dist):
+        """
+        Converts a distance measure to water depth.
+        :param dist: distance from sensor to top of water in centimeters
+        :return: depth in centimeters
+        """
         return self.dist_to_bottom - dist
 
-    def start(self):
-        self.is_running = True
-        while self.is_running:
-            depth = self.convert_to_depth(self.avg_sample())
-            if depth >= 0:
-                self.dao.save(WaterLevel(time.time() * 1000, depth))
-            time.sleep(self.measurement_frequency)
+    def get_measurement(self):
+        """
+        Returns the depth of the water in the pump.
+        :return: depth in centimeters
+        """
+        return self._convert_to_depth(self._avg_sample())
 
-    def stop(self):
-        self.is_running = False
-        GPIO.cleanup()
+    def cleanup(self):
+        """
+        Calls cleanup on sensor.
+        """
+        self.sensor.cleanup()

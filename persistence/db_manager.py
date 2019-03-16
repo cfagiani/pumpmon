@@ -13,8 +13,14 @@ DB_CONFIG_ITEM = "db_path"
 
 
 class DatabaseManager:
+    """
+    This class serves as a wrapper over a SQLite3 database. It provides convenience methods for executing DML statements
+    within a transaction as well a mechanism to run DDL statements. This class also maintains a mapping of threads to
+    connections so each thread only needs to incur the overhead of connecting to the database once.
+    """
 
     def __init__(self, config):
+        """Opens a connection to the database specified via the db_path config item."""
         self.db_file = config.get(CONFIG_SECTION, DB_CONFIG_ITEM)
         if self.db_file is None:
             raise ValueError(
@@ -22,6 +28,10 @@ class DatabaseManager:
         self.connection_map = {threading.currentThread().ident: sqlite3.connect(self.db_file)}
 
     def execute_ddl(self, ddl_strings):
+        """
+        Executes 1 or more DDL statements.
+        :param ddl_strings: array of DDL statements
+        """
         try:
             cursor = self.__get_connection().cursor()
             for sql_str in ddl_strings:
@@ -30,6 +40,12 @@ class DatabaseManager:
             cursor.close()
 
     def execute_transaction(self, query_executor):
+        """
+        Opens a cursor on the database and passes it to the query_executor function. If that function returns without
+        and error, this method will call commit on the cursor. If an exception is raised, it will call rollback.
+        :param query_executor: function that takes a cursor as a parameter that it uses to run database statements.
+        :return: results of the query_executor call
+        """
         conn = self.__get_connection()
         cursor = None
         results = None
@@ -46,6 +62,11 @@ class DatabaseManager:
         return results
 
     def close(self, id=None):
+        """
+        Closes the connection for the id (thread id) passed in. If no id is specified, the ident of the current thread
+        will be assumed.
+        :param id: thread id or None
+        """
         if id is None:
             thread_id = threading.currentThread().ident
         else:
@@ -57,11 +78,19 @@ class DatabaseManager:
             self.connection_map.pop(thread_id)
 
     def close_all(self):
+        """
+        Closes all connections to the database.
+        """
         logger.debug("Closing all connections")
         for key in self.connection_map.keys():
             self.close(key)
 
     def __get_connection(self):
+        """
+        Gets a connection to the database. If no connection exists for the thread of execution that is calling this
+        method, a new connection will be opened.
+        :return:
+        """
         thread_id = threading.currentThread().ident
         conn = self.connection_map.get(thread_id, None)
         if conn is None:
