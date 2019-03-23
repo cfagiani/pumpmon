@@ -11,4 +11,4 @@ flask - (unless running headless)
 
 
 Invocation:
-sudo nohup python pumpmon.py & 
+sudo nohup python3 pumpmon.py & 

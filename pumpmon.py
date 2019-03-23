@@ -1,12 +1,14 @@
 """
 __author__ = 'Christopher Fagiani'
 """
-import ConfigParser
 import argparse
+import configparser
 import logging
 import sys
 import threading
 import time
+
+from prometheus_client import start_http_server, Gauge
 
 from model.waterlevel import WaterLevel
 from monitor.pump import PumpMonitor
@@ -22,9 +24,13 @@ class MonitorDriver:
 
     def __init__(self, config, dao):
         self.meas_freq = self.measurement_frequency = config.getfloat("monitor", "measurement_frequency")
+        self.persist = config.getboolean("monitor", "persist_readings")
         self.dao = dao
         self.monitor = PumpMonitor(config)
         self.keep_running = True
+        self.level_gauge = Gauge('water_depth', 'Depth of water in cm')
+        # start prometheus
+        start_http_server(config.getint("prometheus", "prometheus_port"))
 
     def run(self):
         """
@@ -33,10 +39,13 @@ class MonitorDriver:
         This method should be invoked in its own thread. It will run until another thread calls the stop method.
         :return:
         """
+
         while self.keep_running:
             val = self.monitor.get_measurement()
             if val >= 0:
-                self.dao.save(WaterLevel(time.time() * 1000, val))
+                self.level_gauge.set(val)
+                if self.persist:
+                    self.dao.save(WaterLevel(time.time() * 1000, val))
             time.sleep(self.measurement_frequency)
         self.monitor.cleanup()
 
@@ -49,7 +58,7 @@ class MonitorDriver:
 
 
 def main(args):
-    config = ConfigParser.RawConfigParser()
+    config = configparser.RawConfigParser()
     config.read(args.config)
     monitor = None
     configure_logger(args.debug)

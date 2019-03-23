@@ -82,7 +82,8 @@ class DatabaseManager:
         Closes all connections to the database.
         """
         logger.debug("Closing all connections")
-        for key in self.connection_map.keys():
+        # need copy of keys to avoid concurrent modification
+        for key in [k for k, v in self.connection_map.items()]:
             self.close(key)
 
     def __get_connection(self):

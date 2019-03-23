@@ -30,7 +30,7 @@ class PumpMonitor:
         :param sensor:
         """
         if sensor is None:
-            from sensor import SensorDriver
+            from monitor.sensor import SensorDriver
             self.sensor = SensorDriver(config.getint(CONFIG_SECTION, "trigger_pin"),
                                        config.getint(CONFIG_SECTION, "echo_pin"))
         else:
